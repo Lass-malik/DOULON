@@ -164,7 +164,7 @@ def detecter_doublons(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df_raw = df_raw.dropna(how="all")
     COLONNES_UTILES = [
         "N°REC", "NUMERO ABONNE", "COMMENTAIRES DE SOUMISSION",
-        "SOUS CATEGORIE 1", "TYPE DE REQUETE",
+        "SOUS CATEGORIE 1", "TYPE DE REQUETE", "TRAITEE PAR",
     ]
     # Vérification colonnes
     manquantes = [c for c in COLONNES_UTILES if c not in df_raw.columns]
@@ -175,6 +175,8 @@ def detecter_doublons(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df = df.dropna(subset=["N°REC"])
     df["COMMENTAIRES DE SOUMISSION"] = df["COMMENTAIRES DE SOUMISSION"].astype(str).str.strip()
     df["NUMERO ABONNE"] = df["NUMERO ABONNE"].astype(str).str.strip()
+    # Nettoyage TRAITEE PAR : valeur vide → "Inconnu"
+    df["TRAITEE PAR"] = df["TRAITEE PAR"].fillna("Inconnu").astype(str).str.strip()
     stats["total_reclamations"] = len(df)
 
     # 2. Extraction ID
@@ -186,17 +188,23 @@ def detecter_doublons(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     # 3. Filtrage
     df_avec_id = df.dropna(subset=["ID_TRANSACTION"]).copy()
 
-    # 4. Groupby
+    # 4. Groupby — on collecte les paires (N°REC, TRAITEE PAR) pour chaque groupe
+    def agreger_groupe(g: pd.DataFrame) -> pd.Series:
+        nb = len(g)
+        liste = " | ".join(
+            f"{rec} ({agent})"
+            for rec, agent in zip(g["N°REC"], g["TRAITEE PAR"])
+        )
+        return pd.Series({"NOMBRE_RECLAMATIONS": nb, "LISTE_RECLAMATIONS": liste})
+
     df_grouped = (
         df_avec_id
         .groupby(
             ["NUMERO ABONNE", "ID_TRANSACTION", "SOUS CATEGORIE 1", "TYPE DE REQUETE"],
             as_index=False,
         )
-        .agg(
-            NOMBRE_RECLAMATIONS=("N°REC", "count"),
-            LISTE_RECLAMATIONS=("N°REC", list),
-        )
+        .apply(agreger_groupe, include_groups=False)
+        .reset_index(drop=True)
     )
     stats["nb_groupes"] = len(df_grouped)
 
@@ -216,12 +224,8 @@ def detecter_doublons(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
 
 def convertir_liste(df: pd.DataFrame) -> pd.DataFrame:
-    """Convertit la colonne LISTE_RECLAMATIONS (list) en chaîne pour export."""
-    df_export = df.copy()
-    df_export["LISTE_RECLAMATIONS"] = df_export["LISTE_RECLAMATIONS"].apply(
-        lambda lst: " | ".join(str(r) for r in lst)
-    )
-    return df_export
+    """LISTE_RECLAMATIONS est déjà une chaîne — pas de transformation nécessaire."""
+    return df.copy()
 
 
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
@@ -251,7 +255,7 @@ with st.sidebar:
         </div>
         <div style='font-family:DM Mono,monospace;font-size:0.65rem;color:#5a6070;
                     text-transform:uppercase;letter-spacing:0.1em;margin-top:2px'>
-            Outil d'analyse v2.0
+            Outil d'analyse v2.1
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -274,7 +278,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("##### 📋 Colonnes requises")
     for col in ["N°REC", "NUMERO ABONNE", "COMMENTAIRES DE SOUMISSION",
-                "SOUS CATEGORIE 1", "TYPE DE REQUETE"]:
+                "SOUS CATEGORIE 1", "TYPE DE REQUETE", "TRAITEE PAR"]:
         st.markdown(
             f"<div style='font-family:DM Mono,monospace;font-size:0.7rem;"
             f"color:#5a6070;margin:2px 0'>• {col}</div>",
@@ -409,11 +413,8 @@ with tab1:
             unsafe_allow_html=True
         )
 
-        # Affichage avec liste formatée
+        # Affichage
         df_display = df_view.copy()
-        df_display["LISTE_RECLAMATIONS"] = df_display["LISTE_RECLAMATIONS"].apply(
-            lambda lst: " | ".join(str(r) for r in lst)
-        )
         st.dataframe(
             df_display,
             use_container_width=True,
