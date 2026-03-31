@@ -164,7 +164,7 @@ def detecter_doublons(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df_raw = df_raw.dropna(how="all")
     COLONNES_UTILES = [
         "N°REC", "NUMERO ABONNE", "COMMENTAIRES DE SOUMISSION",
-        "SOUS CATEGORIE 1", "TYPE DE REQUETE", "TRAITEE PAR",
+        "SOUS CATEGORIE 1", "TYPE DE REQUETE", "TRAITEE PAR", "STATUT",
     ]
     # Vérification colonnes
     manquantes = [c for c in COLONNES_UTILES if c not in df_raw.columns]
@@ -177,6 +177,7 @@ def detecter_doublons(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df["NUMERO ABONNE"] = df["NUMERO ABONNE"].astype(str).str.strip()
     # Nettoyage TRAITEE PAR : valeur vide → "Inconnu"
     df["TRAITEE PAR"] = df["TRAITEE PAR"].fillna("Inconnu").astype(str).str.strip()
+    df["STATUT"] = df["STATUT"].fillna("Inconnu").astype(str).str.strip()
     stats["total_reclamations"] = len(df)
 
     # 2. Extraction ID
@@ -192,8 +193,8 @@ def detecter_doublons(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     def agreger_groupe(g: pd.DataFrame) -> pd.Series:
         nb = len(g)
         liste = " | ".join(
-            f"{rec} ({agent})"
-            for rec, agent in zip(g["N°REC"], g["TRAITEE PAR"])
+            f"{rec} ({statut}) ({agent})"
+            for rec, statut, agent in zip(g["N°REC"], g["STATUT"], g["TRAITEE PAR"])
         )
         return pd.Series({"NOMBRE_RECLAMATIONS": nb, "LISTE_RECLAMATIONS": liste})
 
@@ -255,7 +256,7 @@ with st.sidebar:
         </div>
         <div style='font-family:DM Mono,monospace;font-size:0.65rem;color:#5a6070;
                     text-transform:uppercase;letter-spacing:0.1em;margin-top:2px'>
-            Outil d'analyse v2.1
+            Outil d'analyse v2.2
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -278,7 +279,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("##### 📋 Colonnes requises")
     for col in ["N°REC", "NUMERO ABONNE", "COMMENTAIRES DE SOUMISSION",
-                "SOUS CATEGORIE 1", "TYPE DE REQUETE", "TRAITEE PAR"]:
+                "SOUS CATEGORIE 1", "TYPE DE REQUETE", "TRAITEE PAR", "STATUT"]:
         st.markdown(
             f"<div style='font-family:DM Mono,monospace;font-size:0.7rem;"
             f"color:#5a6070;margin:2px 0'>• {col}</div>",
